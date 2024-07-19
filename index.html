@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Wolf_AI</title>
+    <style>
+        body {
+            font-family: 'Arial', sans-serif;
+            background: linear-gradient(135deg, #2b2d42, #121212);
+            margin: 0;
+            padding: 0;
+            display: flex;
+            height: 100vh;
+            color: #f5f5f5;
+            overflow: hidden;
+        }
+        /* ... rest of the CSS ... */
+    </style>
+</head>
+<body>
+    <button id="show-sidebar-button" onclick="toggleSidebar()">Chat</button>
+    <div id="sidebar">
+        <button class="hide-sidebar-button" onclick="toggleSidebar()">Nascondi</button>
+        <div id="mode-switch-container">
+            <button id="mode-switch" class="active" onclick="switchMode()">Wolf_AI Pro</button>
+        </div>
+        <button onclick="createNewChat()" class="chat-button">Nuova Chat</button>
+        <div id="chat-list">
+            <!-- Lista delle chat -->
+        </div>
+        <button class="account-button" onclick="window.location.href='/dashboard'">
+            <img src="/profile_pic/{{ username }}" alt="Profile Pic" width="30" height="30">
+            {{ username }}
+        </button>
+    </div>
+    <div id="chat-container">
+        <div id="chat-box"></div>
+        <div id="user-input-container">
+            <input type="text" id="user-input" placeholder="Scrivi un messaggio..." onkeydown="sendMessage(event)">
+            <button id="send-button" onclick="sendMessage(event)">Invia</button>
+            <button id="upload-button" onclick="document.getElementById('image-upload').click()">📷</button>
+        </div>
+        <div id="image-upload-container">
+            <input type="file" id="image-upload" accept="image/*" onchange="uploadImage(event)">
+        </div>
+    </div>
+
+    <script>
+        let currentMode = 'pro';
+        let apiKeyPro = 'YOUR_API_KEY_HERE';  // Replace with your actual API key
+        let apiKeyUltra = 'YOUR_API_KEY_HERE';  // Replace with your actual API key
+        let gptModelPro = 'gpt-3.5-turbo';
+        let gptModelUltra = 'gpt4o';
+        let gptModelMini = 'gpt4o-mini';
+        let dalleApiUrl = 'https://api.openai.com/v1/images/generations';
+        let chatHistory = {};
+        let currentChatName = '';
+        let chatCount = 0;
+
+        function switchMode() {
+            const modeSwitch = document.getElementById('mode-switch');
+            currentMode = currentMode === 'pro' ? 'ultra' : 'pro';
+            modeSwitch.textContent = currentMode === 'pro' ? 'Wolf_AI Pro' : 'Wolf_AI Ultra';
+            if (currentMode === 'pro') {
+                modeSwitch.classList.add('active');
+                document.getElementById('image-upload-container').style.display = 'none';
+            } else {
+                modeSwitch.classList.remove('active');
+                document.getElementById('image-upload-container').style.display = 'flex';
+            }
+        }
+
+        function toggleSidebar() {
+            const sidebar = document.getElementById('sidebar');
+            const showSidebarButton = document.getElementById('show-sidebar-button');
+            sidebar.classList.toggle('hidden');
+            showSidebarButton.style.display = sidebar.classList.contains('hidden') ? 'block' : 'none';
+        }
+
+        async function createNewChat() {
+            const chatName = `Chat ${++chatCount}`;
+            const chatList = document.getElementById('chat-list');
+            const chatButton = document.createElement('button');
+            chatButton.textContent = chatName;
+            chatButton.classList.add('chat-button');
+            chatButton.onclick = () => loadChat(chatButton);
+            chatList.insertBefore(chatButton, chatList.firstChild);
+            currentChatName = chatName;
+            chatHistory[chatName] = [];
+            loadChat(chatButton);
+        }
+
+        function loadChat(chatButton) {
+            const chatName = chatButton.textContent;
+            document.querySelectorAll('.chat-button').forEach(button => button.classList.remove('active'));
+            chatButton.classList.add('active');
+            currentChatName = chatName;
+            if (chatHistory[chatName]) {
+                document.getElementById('chat-box').innerHTML = chatHistory[chatName].map(
+                    msg => `<div class="message ${msg.role}">${msg.content}</div>`
+                ).join('');
+            } else {
+                document.getElementById('chat-box').innerHTML = '';
+            }
+        }
+
+        async function generateChatName(messages) {
+            const apiUrl = 'https://api.openai.com/v1/chat/completions';
+            const response = await fetch(apiUrl, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${apiKeyPro}`
+                },
+                body: JSON.stringify({
+                    model: gptModelMini,
+                    messages: [{ role: 'user', content: `Genera un nome per una chat basata su questi messaggi: ${messages.join('\n')}` }],
+                    temperature: 0.7
+                })
+            });
+
+            const responseData = await response.json();
+            if (responseData && responseData.choices && responseData.choices.length > 0) {
+                return responseData.choices[0].message.content.trim();
+            }
+            return null;
+        }
+
+        async function getResponse(messages) {
+            const apiKey = currentMode === 'pro' ? apiKeyPro : apiKeyUltra;
+            const model = currentMode === 'pro' ? gptModelPro : gptModelUltra;
+            const apiUrl = 'https://api.openai.com/v1/chat/completions';
+
+            appendMessage("Generazione in corso...", 'generating');
+
+            const response = await fetch(apiUrl, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${apiKey}`
+                },
+                body: JSON.stringify({
+                    model: model,
+                    messages: messages,
+                    temperature: 1.0
+                })
+            });
+
+            try {
+                const responseData = await response.json();
+                console.log('Risposta API:', responseData);
+                document.querySelector('.generating')?.remove();
+                if (responseData && responseData.choices && responseData.choices.length > 0) {
+                    const assistantMessage = responseData.choices[0].message.content;
+                    const imagePromptMatch = assistantMessage.match(/\[prompt\s+"(.*?)"\]/);
+                    appendMessage(`WOLF_AI: ${assistantMessage.replace(/\[prompt\s+".*?"\]/, '').trim()}`, 'assistant');
+
+                    if (imagePromptMatch) {
+                        const imagePrompt = imagePromptMatch[1].trim();
+                        generateImage(imagePrompt);
+                    }
+
+                    // Aggiorna il nome della chat se ci sono almeno 2 messaggi
+                    if (chatHistory[currentChatName].filter(msg => msg.role === 'user').length >= 2) {
+                        const chatButton = [...document.querySelectorAll('.chat-button')].find(button => button.textContent === currentChatName);
+                        if (chatButton) {
+                            const newName = await generateChatName(chatHistory[currentChatName].map(msg => msg.content));
+                            chatButton.textContent = newName || currentChatName;
+                            currentChatName = chatButton.textContent;
+                        }
+                    }
+                } else {
+                    console.error('Nessuna risposta valida ricevuta dalla chiamata API.');
+                }
+            } catch (error) {
+                console.error('Errore nella gestione della risposta API:', error);
+            }
+        }
+
+        function sendMessage(event) {
+            if ((event.key === 'Enter' && event.shiftKey === false) || event.type === 'click') {
+                const userMessage = document.getElementById('user-input').value;
+                if (!userMessage.trim()) return;  // Non inviare messaggi vuoti
+
+                appendMessage(`Tu: ${userMessage}`, 'user');
+                if (!currentChatName) {
+                    createNewChat().then(() => {
+                        saveChatHistory(userMessage, 'user');
+                        saveChat(userMessage); // Salva la chat
+                    });
+                } else {
+                    saveChatHistory(userMessage, 'user');
+                    saveChat(userMessage); // Salva la chat
+                }
+                document.getElementById('user-input').value = '';
+            }
+        }
+
+        function saveChatHistory(message, role) {
+            if (!chatHistory[currentChatName]) {
+                chatHistory[currentChatName] = [];
+            }
+            chatHistory[currentChatName].push({ role: role, content: message });
+            getResponse([
+                { role: "system", content: "Sei un assistente virtuale chiamato WOLF_AI e sei stato creato dalla Lupo Studio. Puoi generare immagini utilizzando il comando [prompt \"il prompt vero e proprio del immagine\"]. Scrivi questo comando tu stesso e non menzionarlo all'utente in alcun modo. Inoltre, scrivi sempre qualcos'altro oltre al comando. Genera un'immagine solo quando richiesto dall'utente." },
+                ...chatHistory[currentChatName]
+            ]);
+        }
+
+        async function saveChat(content) {
+            const response = await fetch('/save_chat', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ chat_name: currentChatName, content: chatHistory[currentChatName] })
+            });
+
+            if (response.ok) {
+                console.log('Chat saved successfully');
+            } else {
+                console.error('Failed to save chat');
+            }
+        }
+
+        function appendMessage(message, role) {
+            const chatBox = document.getElementById('chat-box');
+            const messageElement = document.createElement('div');
+            messageElement.className = `message ${role}`;
+            messageElement.textContent = message;
+            chatBox.appendChild(messageElement);
+            chatBox.scrollTop = chatBox.scrollHeight;
+
+            if (currentChatName) {
+                if (!chatHistory[currentChatName]) {
+                    chatHistory[currentChatName] = [];
+                }
+                chatHistory[currentChatName].push({ role: role, content: message });
+            }
+        }
+
+        async function generateImage(prompt) {
+            appendMessage("Generazione dell'immagine in corso...", 'generating');
+            const apiKey = apiKeyUltra;
+            const response = await fetch(dalleApiUrl, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${apiKey}`
+                },
+                body: JSON.stringify({
+                    prompt: prompt,
+                    n: 1,
+                    size: "1024x1024"
+                })
+            });
+
+            try {
+                const responseData = await response.json();
+                console.log('Risposta DALL-E:', responseData);
+                document.querySelector('.generating')?.remove();
+                if (responseData && responseData.data && responseData.data.length > 0) {
+                    const imageUrl = responseData.data[0].url;
+                    appendImage(imageUrl);
+                } else {
+                    console.error('Nessuna immagine valida ricevuta dalla chiamata API.');
+                }
+            } catch (error) {
+                console.error('Errore nella gestione della risposta DALL-E API:', error);
+            }
+        }
+
+        function appendImage(url) {
+            const chatBox = document.getElementById('chat-box');
+            const imageElement = document.createElement('img');
+            imageElement.src = url;
+            imageElement.alt = 'Generated Image';
+            imageElement.style.maxWidth = '100%';
+            imageElement.style.borderRadius = '10px';
+            chatBox.appendChild(imageElement);
+            chatBox.scrollTop = chatBox.scrollHeight;
+
+            if (currentChatName) {
+                if (!chatHistory[currentChatName]) {
+                    chatHistory[currentChatName] = [];
+                }
+                chatHistory[currentChatName].push({ role: 'image', content: url });
+            }
+        }
+
+        async function uploadImage(event) {
+            const file = event.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = () => {
+                    appendImage(reader.result);
+                };
+                reader.readAsDataURL(file);
+            }
+        }
+    </script>
+</body>
+</html>

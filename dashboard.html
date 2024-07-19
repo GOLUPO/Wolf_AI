@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard</title>
+    <style>
+        body {
+            font-family: 'Arial', sans-serif;
+            background: linear-gradient(135deg, #2b2d42, #121212);
+            color: #f5f5f5;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            flex-direction: column;
+        }
+        .container {
+            background-color: #1e1e1e;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+            width: 80%;
+            max-width: 800px;
+            text-align: center;
+        }
+        h1 {
+            margin-bottom: 20px;
+        }
+        a {
+            color: #4caf50;
+            text-decoration: none;
+            display: block;
+            margin-top: 10px;
+        }
+        ul {
+            list-style: none;
+            padding: 0;
+        }
+        li {
+            background-color: #2b2d42;
+            padding: 10px;
+            border-radius: 5px;
+            margin-bottom: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        button {
+            background-color: #6200ea;
+            border: none;
+            padding: 5px 10px;
+            border-radius: 5px;
+            color: #f5f5f5;
+            cursor: pointer;
+            transition: background-color 0.3s ease-in-out;
+        }
+        button:hover {
+            background-color: #3700b3;
+        }
+        form {
+            margin-top: 20px;
+        }
+        label {
+            display: block;
+            margin: 10px 0 5px;
+        }
+        input {
+            width: 100%;
+            padding: 10px;
+            margin-bottom: 10px;
+            border: none;
+            border-radius: 5px;
+            background: #2b2d42;
+            color: #f5f5f5;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Welcome, {{ name }}!</h1>
+        <a href="{{ url_for('logout') }}">Logout</a>
+        <a href="{{ url_for('index') }}">Home</a>
+        <h2>Your Chats</h2>
+        <ul>
+            {% for chat in chats %}
+            <li>
+                <span>{{ chat.name }}</span>
+                <button onclick="deleteChat('{{ chat.id }}')">Delete</button>
+            </li>
+            {% endfor %}
+        </ul>
+        <form method="POST" enctype="multipart/form-data">
+            <h2>Update Credentials</h2>
+            <label for="new_username">New Username:</label>
+            <input type="text" id="new_username" name="new_username" placeholder="Enter new username">
+            <label for="new_password">New Password:</label>
+            <input type="password" id="new_password" name="new_password" placeholder="Enter new password">
+            <label for="profile_pic">Profile Picture:</label>
+            <input type="file" id="profile_pic" name="profile_pic">
+            <button type="submit">Update</button>
+        </form>
+    </div>
+    <script>
+        function deleteChat(chatId) {
+            fetch(`/delete_chat/${chatId}`, {
+                method: 'DELETE'
+            }).then(response => {
+                if (response.ok) {
+                    window.location.reload();
+                } else {
+                    alert('Failed to delete chat.');
+                }
+            });
+        }
+    </script>
+</body>
+</html>
